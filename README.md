@@ -5,6 +5,97 @@
 여기에서 사용하는 architecture는 아래와 같습니다. Agent의 기본동작 확인 및 구현을 위해 EC2에 docker 형태로 탑재되어 ALB와 CloudFront를 이용해 사용자가 streamlit으로 동작을 테스트 할 수 있습니다. Agent가 생성하는 그림이나 문서는 S3를 이용해 공유될 수 있으며, EC2에 내장된 MCP server/client를 이용해 인터넷검색(Tavily), RAG(knowledge base) AWS tools(use-aws), AWS Document를 이용할 수 있습니다.
 
 
+## Agent Skills
+
+[Agent Skills](https://agentskills.io/specification)은 AI agent에게 특정 작업 수행 방법을 가르치는 재사용 가능한 지침 패키지입니다. 각 스킬은 `SKILL.md` 파일로 구성되며, YAML 프론트매터(name, description)와 상세 지침(워크플로, 코드 패턴 등)으로 이루어져 있습니다.
+
+### Progressive Disclosure
+
+시스템 프롬프트에는 스킬의 **이름과 설명만** XML 형태로 포함하고, 상세 지침은 agent가 `get_skill_instructions` 도구를 호출하여 **필요할 때만** 로드합니다. 이를 통해 프롬프트 크기를 최소화하면서도 agent가 다양한 스킬을 활용할 수 있습니다.
+
+```xml
+<available_skills>
+  <skill>
+    <name>pdf</name>
+    <description>PDF 파일 읽기/병합/분할/OCR/폼 처리 등</description>
+  </skill>
+  ...
+</available_skills>
+```
+
+### 스킬의 구조
+
+각 스킬은 `SKILL.md` 파일 하나가 핵심이며, 필요에 따라 `scripts/`, `references/`, `assets/` 등의 보조 폴더를 포함할 수 있습니다.
+
+```text
+skills/
+├── pdf/
+│   ├── SKILL.md          # YAML 프론트매터 + 상세 지침
+│   └── assets/           # 폰트 등 보조 리소스
+├── notion/
+│   └── SKILL.md
+└── xlsx/
+    └── SKILL.md
+```
+
+`SKILL.md`는 아래와 같이 YAML 프론트매터와 마크다운 본문으로 구성됩니다.
+
+```markdown
+---
+name: pdf
+description: PDF 파일 처리를 위한 스킬
+---
+
+# PDF Processing Guide
+
+## Overview
+이 가이드는 Python 라이브러리를 사용한 PDF 처리 작업을 다룹니다.
+execute_code 도구로 아래의 Python 코드를 실행하세요.
+...
+```
+
+### 스킬의 종류
+
+스킬은 **베이스 스킬**과 **플러그인 스킬** 두 가지로 구분됩니다.
+
+- **베이스 스킬** (`application/skills/`): Agent 모드에서 공통으로 사용하는 스킬입니다. 플러그인 모드에서도 기본으로 병합되어 함께 제공됩니다.
+
+| 스킬 | 설명 |
+|------|------|
+| pdf | PDF 읽기/병합/분할/OCR/폼 처리 |
+| notion | Notion API를 통한 페이지/DB/블록 관리 |
+| memory-manager | MEMORY.md 기반 대화 메모리 관리 |
+| docx | Word 문서 생성/편집/분석 |
+| xlsx | 스프레드시트 작업/모델링 |
+| pptx | PowerPoint 읽기/편집/생성 |
+| myslide | AWS 테마 프레젠테이션 생성 |
+| retrieve | Bedrock Knowledge Base RAG 검색 |
+| skill-creator | 새로운 스킬 설계/패키징 가이드 |
+
+- **플러그인 스킬** (`application/plugins/<플러그인명>/skills/`): 특정 플러그인 모드에서만 활성화되는 스킬입니다.
+
+| 플러그인 | 스킬 | 설명 |
+|----------|------|------|
+| productivity | memory-management | 약어/별칭 해석 포함 메모리 관리 |
+| productivity | task-management | TASKS.md 기반 작업 관리 |
+| frontend-design | frontend-design | 프론트엔드 UI 구현 가이드 |
+| enterprise-search | search-strategy | 질의 분해/다중 소스 검색 전략 |
+| enterprise-search | knowledge-synthesis | 다중 소스 결과 통합/출처 부여 |
+| enterprise-search | source-management | MCP 검색 소스 연결/우선순위 |
+
+### 스킬의 동작 흐름
+
+[skill.py](./application/skill.py)에서 구현된 스킬의 동작 흐름은 다음과 같습니다.
+
+1. **스킬 탐색**: `SkillManager`가 스킬 디렉토리를 스캔하여 `SKILL.md`의 YAML 프론트매터(이름, 설명)를 레지스트리에 등록합니다.
+2. **프롬프트 구성**: `build_skill_prompt()`가 활성화된 스킬의 이름/설명을 `<available_skills>` XML로 시스템 프롬프트에 포함합니다.
+3. **지침 로드**: 사용자 요청에 맞는 스킬이 있으면 agent가 `get_skill_instructions` 도구를 호출하여 상세 지침을 로드합니다.
+4. **작업 수행**: 로드된 지침에 따라 `execute_code`, `write_file` 등의 도구를 사용하여 작업을 수행합니다.
+5. **결과 전달**: 결과 파일이 있으면 `upload_file_to_s3`로 업로드하여 URL을 제공합니다.
+
+활성화할 스킬은 `config.json`의 `default_skills`(베이스)와 `plugin_skills`(플러그인별)에서 설정하며, Streamlit UI에서도 체크박스로 선택할 수 있습니다.
+
+
 ## Strands Agent 활용 방법
 
 ### Streamlit에서 agent의 실행
