@@ -36,14 +36,23 @@ RUN npx -y mcp-server-fetch-typescript --version 2>/dev/null || true && \
     npx playwright install --with-deps chromium
 
 RUN pip install streamlit streamlit_paste_button
-RUN pip install strands-agents strands-agents-tools
+RUN pip install strands-agents strands-agents-tools bedrock-agentcore
 RUN pip install langchain_aws langchain langchain_community langchain_experimental langchain-text-splitters
-RUN pip install mcp pandas numpy boto3
+RUN pip install mcp 
 RUN pip install tavily-python==0.5.0 pytz==2024.2 beautifulsoup4==4.12.3
 RUN pip install plotly_express==0.4.1 matplotlib==3.10.0
 RUN pip install PyPDF2==3.0.1 requests reportlab
-RUN pip install rich==13.9.0 bedrock-agentcore pyyaml
-RUN pip install colorama finance-datareader
+RUN pip install opensearch-py 
+RUN pip install pyyaml pandas numpy boto3
+RUN pip install uv kaleido diagrams graphviz rich colorama finance-datareader
+
+RUN pip install python-pptx
+# Skills: docx / xlsx / pptx / myslide
+RUN pip install defusedxml lxml openpyxl Pillow "markitdown[pptx]"
+# Skills: pdf
+RUN pip install reportlab pypdf pdfplumber PyYAML
+# Skills: browser automation
+RUN pip install "browser-use[cli]"
 
 RUN mkdir -p /root/.streamlit
 COPY config.toml /root/.streamlit/
