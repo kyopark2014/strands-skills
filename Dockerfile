@@ -10,9 +10,9 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install streamlit==1.41.0 streamlit-chat pandas numpy boto3 
+RUN pip install streamlit==1.41.0 streamlit-chat streamlit_paste_button
 RUN pip install langchain_aws langchain langchain_community langchain_experimental langchain-text-splitters
-RUN pip install mcp 
+RUN pip install mcp pandas numpy boto3
 RUN pip install aioboto3 opensearch-py
 RUN pip install tavily-python==0.5.0 rizaio==0.8.0 pytz==2024.2 beautifulsoup4==4.12.3
 RUN pip install plotly_express==0.4.1 matplotlib==3.10.0 chembl-webresource-client pytrials
