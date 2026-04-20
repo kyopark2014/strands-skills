@@ -1,3 +1,7 @@
+FROM --platform=linux/amd64 python:3.13-slim
+
+WORKDIR /app
+
 # Install Node.js, npm, and system dependencies
 RUN apt-get update && apt-get install -y curl && \
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
