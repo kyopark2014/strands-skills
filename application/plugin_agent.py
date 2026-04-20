@@ -87,7 +87,7 @@ async def run_plugin_agent(query: str, strands_tools: list[str], mcp_servers: li
         command = query.split(" ")[0].lstrip("/")
         logger.info(f"command: {command}")
 
-    if strands_agent.agent is None or selected_strands_tools != strands_tools or selected_mcp_servers != mcp_servers or selected_skill_list != skill_list or selected_plugin_skill_list != plugin_skill_list or active_plugin != plugin_name:
+    if selected_strands_tools != strands_tools or selected_mcp_servers != mcp_servers or selected_skill_list != skill_list or selected_plugin_skill_list != plugin_skill_list or active_plugin != plugin_name:
         selected_strands_tools = strands_tools
         selected_mcp_servers = mcp_servers
         selected_skill_list = skill_list

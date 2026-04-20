@@ -35,7 +35,7 @@ def load_config():
         logger.error(f"Error loading config: {e}")
         config = {}
         
-        project_name = "strands-skill"
+        project_name = "strands-skills"
 
         session = boto3.Session()
         region = session.region_name
