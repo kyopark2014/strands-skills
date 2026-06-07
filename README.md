@@ -16,15 +16,8 @@
 ```mermaid
 flowchart TB
   subgraph UI["Streamlit (application/app.py)"]
-    MODE["모드: 대화 / RAG / Agent / 이미지 / 플러그인"]
+    MODE["모드: RAG / Agent / 플러그인"]
     SKUI["Skill · Strands Tool · MCP 선택"]
-    NQ[NotificationQueue]
-  end
-
-  subgraph ChatModes["chat.py"]
-    GC[general_conversation]
-    RAG[run_rag_with_knowledge_base]
-    IMG[summarize_image]
   end
 
   subgraph LLM["Amazon Bedrock"]
@@ -32,36 +25,26 @@ flowchart TB
     KBR[Bedrock Agent retrieve]
   end
 
+  subgraph RAG["chat.py"]
+    RAGfn[run_rag_with_knowledge_base]
+  end
+
   subgraph Skills["Agent Skills (skill.py)"]
-    BASE["application/skills/*/SKILL.md"]
-    PLG["application/plugins/*/skills/*/SKILL.md"]
-    BSP["build_skill_prompt / build_command_prompt"]
+    SRC["application/skills/*/SKILL.md"]
+    BSP[build_skill_prompt]
     GSI[get_skill_instructions]
-    SM[SkillManager / PluginManager]
   end
 
   subgraph AgentStack["Strands Agents SDK"]
-    RSA["strands_agent.run_strands_agent"]
-    RPA["plugin_agent.run_plugin_agent"]
-    CA[create_agent]
-    A[Agent]
-    SA[stream_async]
-    BM[BedrockModel]
+    RSA[strands_agent.run_strands_agent]
+    RPA[plugin_agent.run_plugin_agent]
+    A[Agent + BedrockModel]
     BT["Built-in: execute_code, bash, upload_file_to_s3"]
-    ST["strands_tools: current_time, file_read, file_write"]
-    MCM[MCPClientManager]
+    ST[strands_tools + MCPClientManager]
   end
 
   subgraph MCPServers["MCP Servers (mcp_config.py)"]
-    direction TB
-    T[tavily / web_fetch]
-    KB[knowledge base → mcp_server_retrieve]
-    AWS[use-aws / aws_documentation]
-    DOM[trade_info / korea_weather]
-    INT[slack / notion / gog / obsidian]
-    DEV[repl_coder / drawio / text_extraction]
-    EMP["AWS Sentral / AWS Outlook"]
-    USR[사용자 설정]
+    MCP["tavily · use-aws · retrieve · web_fetch · …"]
   end
 
   subgraph Storage["Artifacts / S3"]
@@ -69,39 +52,25 @@ flowchart TB
     S3[(S3)]
   end
 
-  MODE -->|일상적인 대화| GC
-  MODE -->|RAG| RAG
-  MODE -->|이미지 분석| IMG
+  MODE -->|RAG| RAGfn
   MODE -->|Agent| RSA
   MODE -->|플러그인| RPA
   SKUI -->|skill_list| BSP
 
-  GC --> BR
-  RAG --> KBR
-  RAG --> BR
-  IMG --> BR
+  RAGfn --> KBR
+  RAGfn --> BR
 
-  RSA --> CA
-  RPA --> CA
-  CA --> A
-  A --> SA
-  A --> BM
-  BM --> BR
+  RSA --> A
+  RPA --> A
+  A --> BR
   A --> BT
   A --> ST
-  A --> MCM
   A --> GSI
   BSP -->|system_prompt| A
-  GSI --> SM
-  SM --> BASE
-  SM --> PLG
-  MCM --> MCPServers
+  GSI --> SRC
+  ST --> MCPServers
   BT --> ART
   BT --> S3
-  RSA --> NQ
-  RPA --> NQ
-```
-
 ```
 
 | 모드 | 모듈 | 설명 |
