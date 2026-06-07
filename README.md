@@ -9,6 +9,113 @@
 
 [Agent Skills](https://agentskills.io/specification)은 AI agent에게 특정 작업 수행 방법을 가르치는 재사용 가능한 지침 패키지입니다. 각 스킬은 `SKILL.md` 파일로 구성되며, YAML 프론트매터(name, description)와 상세 지침(워크플로, 코드 패턴 등)으로 이루어져 있습니다.
 
+
+
+### Operation Architecture
+
+```mermaid
+flowchart TB
+  subgraph UI["Streamlit (application/app.py)"]
+    MODE["모드: 대화 / RAG / Agent / 이미지 / 플러그인"]
+    SKUI["Skill · Strands Tool · MCP 선택"]
+    NQ[NotificationQueue]
+  end
+
+  subgraph ChatModes["chat.py"]
+    GC[general_conversation]
+    RAG[run_rag_with_knowledge_base]
+    IMG[summarize_image]
+  end
+
+  subgraph LLM["Amazon Bedrock"]
+    BR[Bedrock Runtime]
+    KBR[Bedrock Agent retrieve]
+  end
+
+  subgraph Skills["Agent Skills (skill.py)"]
+    BASE["application/skills/*/SKILL.md"]
+    PLG["application/plugins/*/skills/*/SKILL.md"]
+    BSP["build_skill_prompt / build_command_prompt"]
+    GSI[get_skill_instructions]
+    SM[SkillManager / PluginManager]
+  end
+
+  subgraph AgentStack["Strands Agents SDK"]
+    RSA["strands_agent.run_strands_agent"]
+    RPA["plugin_agent.run_plugin_agent"]
+    CA[create_agent]
+    A[Agent]
+    SA[stream_async]
+    BM[BedrockModel]
+    BT["Built-in: execute_code, bash, upload_file_to_s3"]
+    ST["strands_tools: current_time, file_read, file_write"]
+    MCM[MCPClientManager]
+  end
+
+  subgraph MCPServers["MCP Servers (mcp_config.py)"]
+    direction TB
+    T[tavily / web_fetch]
+    KB[knowledge base → mcp_server_retrieve]
+    AWS[use-aws / aws_documentation]
+    DOM[trade_info / korea_weather]
+    INT[slack / notion / gog / obsidian]
+    DEV[repl_coder / drawio / text_extraction]
+    EMP["AWS Sentral / AWS Outlook"]
+    USR[사용자 설정]
+  end
+
+  subgraph Storage["Artifacts / S3"]
+    ART[application/artifacts/]
+    S3[(S3)]
+  end
+
+  MODE -->|일상적인 대화| GC
+  MODE -->|RAG| RAG
+  MODE -->|이미지 분석| IMG
+  MODE -->|Agent| RSA
+  MODE -->|플러그인| RPA
+  SKUI -->|skill_list| BSP
+
+  GC --> BR
+  RAG --> KBR
+  RAG --> BR
+  IMG --> BR
+
+  RSA --> CA
+  RPA --> CA
+  CA --> A
+  A --> SA
+  A --> BM
+  BM --> BR
+  A --> BT
+  A --> ST
+  A --> MCM
+  A --> GSI
+  BSP -->|system_prompt| A
+  GSI --> SM
+  SM --> BASE
+  SM --> PLG
+  MCM --> MCPServers
+  BT --> ART
+  BT --> S3
+  RSA --> NQ
+  RPA --> NQ
+```
+
+```
+
+| 모드 | 모듈 | 설명 |
+|------|------|------|
+| 일상적인 대화 | `chat.general_conversation` | 대화 이력 + Bedrock Runtime `invoke_model_with_response_stream` 스트리밍 |
+| RAG | `chat.run_rag_with_knowledge_base` | Bedrock Agent Runtime `retrieve`로 Knowledge Base 검색 후 Bedrock Runtime으로 답변 생성 |
+| **Agent** | `strands_agent.run_strands_agent` | Strands SDK + 베이스 스킬 + strands_tools + MCP |
+| **플러그인 Agent** | `plugin_agent.run_plugin_agent` | Agent + 베이스/플러그인 스킬 병합, `plugins/*/mcp_servers.list` 기본 MCP |
+| enterprise-search | `plugin_agent` | search-strategy / knowledge-synthesis / source-management 스킬 + MCP 다중 소스 검색 |
+| productivity | `plugin_agent` | memory-management / task-management 스킬 + MCP 작업·메모리 관리 |
+| frontend-design | `plugin_agent` | frontend-design 스킬 기반 UI 구현 가이드 |
+| 이미지 분석 | `chat.summarize_image` | Bedrock 멀티모달 (이미지 + 텍스트) 분석, markdown artifact S3 업로드 |
+
+
 ### Progressive Disclosure
 
 시스템 프롬프트에는 스킬의 **이름과 설명만** XML 형태로 포함하고, 상세 지침은 agent가 `get_skill_instructions` 도구를 호출하여 **필요할 때만** 로드합니다. 이를 통해 프롬프트 크기를 최소화하면서도 agent가 다양한 스킬을 활용할 수 있습니다.
@@ -21,7 +128,6 @@
   </skill>
   ...
 </available_skills>
-```
 
 ### 스킬의 구조
 
