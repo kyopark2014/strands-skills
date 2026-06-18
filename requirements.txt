@@ -24,8 +24,8 @@ uv
 kaleido 
 diagrams 
 reportlab
-strands-agents 
-strands-agents-tools
+strands-agents[openai]==1.44.0
+strands-agents-tools==0.8.1
 pyyaml
 streamlit-paste-button
 Pillow

@@ -36,7 +36,7 @@ RUN npx -y mcp-server-fetch-typescript --version 2>/dev/null || true && \
     npx playwright install --with-deps chromium
 
 RUN pip install streamlit streamlit_paste_button
-RUN pip install strands-agents strands-agents-tools bedrock-agentcore
+RUN pip install "strands-agents[openai]==1.44.0" strands-agents-tools==0.8.1 bedrock-agentcore
 RUN pip install langchain_aws langchain langchain_community langchain_experimental langchain-text-splitters
 RUN pip install mcp 
 RUN pip install tavily-python==0.5.0 pytz==2024.2 beautifulsoup4==4.12.3
