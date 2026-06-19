@@ -89,6 +89,7 @@ with st.sidebar:
         "trade_info", 
         "code interpreter", 
         "web_fetch",
+        "websearch",
         "drawio",
         "text_extraction",
         "slack",
@@ -103,7 +104,7 @@ with st.sidebar:
     ]
 
     mcp_selections = {}
-    default_mcp_selections = ["korea_weather", "web_fetch", "tavily"]
+    default_mcp_selections = ["korea_weather", "web_fetch", "websearch"]
 
     # Default: prevent strands_selections undefined when not in Agent mode
     default_strands_tool_selections = config.get("default_strands_tool_selections") or default_strands_tool_selections
