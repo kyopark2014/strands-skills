@@ -61,9 +61,10 @@ BASE_SYSTEM_PROMPT = (
     "## Agent Workflow\n"
     "1. 사용자 입력을 받는다\n"
     "2. 요청에 맞는 skill이 있으면 skills 도구로 해당 skill의 상세 지침을 로드한다\n"
-    "3. skill 지침에 따라 file_read, file_write, execute_code 등의 도구를 사용하여 작업을 수행한다\n"
-    "4. 결과 파일은 application/artifacts/ 디렉터리(ARTIFACTS_DIR)에 저장하고, 있으면 upload_file_to_s3로 업로드하여 URL을 제공한다\n"
-    "5. 최종 결과를 사용자에게 전달한다\n"
+    "3. skill 지침에 따라 file_read, file_write, execute_code, bash 등의 도구를 사용하여 작업을 수행한다\n"
+    "4. execute_code와 bash의 작업 디렉터리는 application/artifacts/이다. 결과 파일은 이 디렉터리에 파일명만으로 저장한다 (예: report.docx, chart.png)\n"
+    "5. 있으면 upload_file_to_s3로 업로드하여 URL을 제공한다\n"
+    "6. 최종 결과를 사용자에게 전달한다\n"
 )
 
 
@@ -264,7 +265,8 @@ def execute_code(code: str) -> str:
     json, csv, os, requests, etc.
 
     Variables and imports from previous calls persist across invocations.
-    Generated files should be saved under application/artifacts/ (relative: artifacts/).
+    Working directory is application/artifacts/. Save generated files by filename only
+    (e.g. report.docx), not application/artifacts/report.docx.
 
     Path variables (pre-defined, do NOT redefine):
     - REPO_ROOT: absolute path to repository root
@@ -288,7 +290,7 @@ def execute_code(code: str) -> str:
     stderr_capture = io.StringIO()
 
     try:
-        os.chdir(WORKING_DIR)
+        os.chdir(ARTIFACTS_DIR)
         old_stdout, old_stderr = sys.stdout, sys.stderr
         sys.stdout, sys.stderr = stdout_capture, stderr_capture
 
@@ -516,13 +518,25 @@ def _ensure_cli_scripts_on_path() -> None:
 
 @tool
 def bash(command: str) -> str:
-    """Execute a bash command and return the result"""
+    """Execute a bash command from application/artifacts/ and return the result.
+
+    Working directory is ARTIFACTS_DIR. Save outputs by filename only
+    (e.g. node create_skills_doc.js, output.docx).
+    """
     logger.info(f"###### bash: {command} ######")
     _ensure_cli_scripts_on_path()
+    os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+    env = {
+        **os.environ,
+        "REPO_ROOT": REPO_ROOT,
+        "WORKING_DIR": WORKING_DIR,
+        "ARTIFACTS_DIR": ARTIFACTS_DIR,
+        "ARTIFACTS_REL": ARTIFACTS_REL,
+    }
     result = subprocess.run(
         command, shell=True, capture_output=True, text=True,
-        cwd=WORKING_DIR, timeout=300,
-        env=os.environ,
+        cwd=ARTIFACTS_DIR, timeout=300,
+        env=env,
     )
     parts = []
     if result.stdout:
@@ -662,7 +676,7 @@ def get_model():
     return model
 
 conversation_manager = SlidingWindowConversationManager(
-    window_size=10,  
+    window_size=50,  
 )
 
 
@@ -1163,7 +1177,7 @@ async def run_strands_agent(query: str, strands_tools: list[str], mcp_servers: l
 
             elif "current_tool_use" in event:
                 current_tool_use = event["current_tool_use"]
-                logger.info(f"current_tool_use: {current_tool_use}")
+                # logger.info(f"current_tool_use: {current_tool_use}")
                 name = current_tool_use.get("name", "")
                 input_val = current_tool_use.get("input", "")
                 toolUseId = current_tool_use.get("toolUseId", "")
