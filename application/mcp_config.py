@@ -34,6 +34,8 @@ def load_config(mcp_type):
         mcp_type = "aws_sentral"
     elif mcp_type == "AWS Outlook (Employee)":
         mcp_type = "aws_outlook"    
+    elif mcp_type == "knowledge base":
+        mcp_type = "kb-retriever"
 
     if mcp_type == "basic":
         return {
@@ -131,6 +133,16 @@ def load_config(mcp_type):
             }
         }
 
+
+    elif mcp_type == "kb-retriever":
+        return {
+            "mcpServers": {
+                "kb_retriever": {
+                    "command": "python",
+                    "args": [f"{workingDir}/mcp_server_retrieve.py"]
+                }
+            }
+        }
 
     elif mcp_type == "notion":
         token = utils.get_notion_key()
