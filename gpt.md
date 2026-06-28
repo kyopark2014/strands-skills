@@ -185,11 +185,45 @@ def _ensure_mantle_base_url_patch() -> None:
     _mantle_url_patch_applied = True
 ```
 
+### OpenAIResponsesModel vs OpenAIModel
+
+`OpenAIModel`과 `OpenAIResponsesModel`은 Strands SDK에서 **서로 다른 OpenAI 호환 API**를 호출하는 모델 프로바이더입니다. 둘 다 Bedrock Runtime의 `invoke_model`이 아니라 **Bedrock Mantle**의 OpenAI 호환 엔드포인트를 사용하지만, Mantle이 노출하는 API 종류(`chat` vs `responses`)와 각 Bedrock GPT 모델이 지원하는 API가 다릅니다.
+
+| 구분 | `OpenAIModel` | `OpenAIResponsesModel` |
+|------|---------------|------------------------|
+| OpenAI API | **Chat Completions API** | **Responses API** |
+| SDK 호출 | `client.chat.completions.create()` | `client.responses.create()` |
+| `mantle_api` | `"chat"` | `"responses"` |
+| 대상 모델 | GPT OSS 120B, 20B | GPT 5.4, 5.5 |
+| 토큰 파라미터 | `max_tokens` | `max_output_tokens` |
+
+**호출 API**
+
+- **`OpenAIModel`**: 전통적인 Chat Completions API를 사용합니다. `messages` 배열 기반 대화와 function tool calling에 맞춰져 있습니다.
+- **`OpenAIResponsesModel`**: OpenAI Responses API를 사용합니다. GPT 5.x 등 최신 모델이 이 API를 기준으로 동작합니다.
+
+**대상 모델**
+
+`info.py`의 `mantle_api` 값으로 자동 선택되며, 모델마다 지원 API가 정해져 있어 임의로 바꿀 수 없습니다.
+
+- `"responses"`: GPT 5.4, 5.5 등 Responses API 전용 모델
+- `"chat"`: GPT OSS 120B, 20B 등 Chat Completions API 모델
+
+**SDK 기능**
+
+- **`OpenAIModel`**: 범용 Chat Completions 프로바이더. OpenAI 호환 엔드포인트 전반에 사용할 수 있습니다.
+- **`OpenAIResponsesModel`**: Responses API 전용. reasoning 스트리밍, web search 등 내장 도구(built-in tools) 지원이 더 넓지만 `openai>=2.0.0`이 필요합니다.
+
+Agent 모드에서의 **함수 tool calling + MCP**는 둘 다 지원합니다. 차이는 주로 **어떤 HTTP API를 호출하느냐**와 **모델 세대별 API 지원 여부**입니다.
+
 ### mantle_api에 따른 모델 생성
 
 `_build_mantle_openai_model()`은 `info.py`의 `mantle_api` 값에 따라 서로 다른 Strands 모델 클래스를 반환합니다.
 
 ```python
+from strands.models.openai import OpenAIModel
+from strands.models.openai_responses import OpenAIResponsesModel
+
 def _build_mantle_openai_model(profile: dict, boto_session, max_output_tokens: int):
     """Route OpenAI-compatible Bedrock models through Bedrock Mantle."""
     _ensure_mantle_base_url_patch()
