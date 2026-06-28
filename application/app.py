@@ -9,11 +9,8 @@ import asyncio
 import logging
 import sys
 import strands_agent
-import plugin
 import uuid
 import utils
-import skill
-import plugin_agent
 from notification_queue import NotificationQueue
 
 logging.basicConfig(
@@ -30,9 +27,6 @@ config = utils.load_config()
 # title
 st.set_page_config(page_title='Strands Skills', page_icon=None, layout="centered", initial_sidebar_state="auto", menu_items=None)
 
-plugin_list = plugin.available_plugins_list()
-logger.info(f"plugin_list: {plugin_list}")
-
 mode_descriptions = {
     "일상적인 대화": [
         "대화이력을 바탕으로 챗봇과 일상의 대화를 편안히 즐길수 있습니다."
@@ -42,15 +36,6 @@ mode_descriptions = {
     ],    
     "Agent": [
         "Strands Agent SDK를 활용한 Agent를 이용합니다."
-    ],
-    "enterprise-search": [
-        "Email, chat, documents, and wikis 등 다양한 도구를 이용해 검색을 합니다."
-    ],
-    "productivity": [
-        "Task management, workplace memory, visual dashboard를 이용한 작업을 관리합니다."
-    ],
-    "frontend-design": [
-        "Frontend Design Plugin을 사용할 수 있습니다."
     ],
     "이미지 분석": [
         "이미지를 선택하여 멀티모달을 이용하여 분석합니다."
@@ -73,7 +58,7 @@ with st.sidebar:
         'RAG', 
         'Agent',         
         '이미지 분석'
-    ] + [plugin["name"] for plugin in plugin_list]
+    ]
     mode = st.radio(label="원하는 대화 형태를 선택하세요. ", options=options, index=2)   
     st.info(mode_descriptions[mode][0])    
 
@@ -118,7 +103,7 @@ with st.sidebar:
         default_skill_selections = config.get("default_skills") or ["skill-creator"]
         logger.info(f"default_skill_selections: {default_skill_selections}")
         with st.expander("Skill 옵션 선택", expanded=True):
-            available_skill_info = skill.available_skill_info("base")
+            available_skill_info = strands_agent.available_skills()
             for s in available_skill_info:
                 default_value = s["name"] in default_skill_selections
                 skill_selections[s["name"]] = st.checkbox(s["name"], key=f"skill_{s['name']}", value=default_value, help=s["description"], disabled=False)
@@ -199,103 +184,6 @@ with st.sidebar:
         
         mcp_servers = [server for server, is_selected in mcp_selections.items() if is_selected]
 
-    # plugin selection
-    elif mode in [plugin["name"] for plugin in plugin_list]:
-        # Plugin Skill Config JSON input
-        st.subheader("⚙️ Plugin Config")
-
-        plugin_skill_selections = {}
-        default_plugin_skill_selections = config.get("plugin_skills", {}).get(mode) or [s["name"] for s in plugin.available_plugin_skills(mode)]
-        logger.info(f"default_plugin_skill_selections: {default_plugin_skill_selections}")
-
-        with st.expander("Plugin Skill 옵션 선택", expanded=True):
-            plugin_skill_info = skill.available_skill_info(mode)
-            logger.info(f"plugin_skill_info: {plugin_skill_info}")
-            for s in plugin_skill_info:
-                default_value = s["name"] in default_plugin_skill_selections
-                plugin_skill_selections[s["name"]] = st.checkbox(s["name"], key=f"plugin_skill_{s['name']}", value=default_value, help=s["description"], disabled=False)
-    
-        plugin_skills = [name for name, is_selected in plugin_skill_selections.items() if is_selected]
-        logger.info(f"plugin_skills: {plugin_skills}")
-
-        if plugin_skills != config.get("plugin_skills", {}).get(mode):
-            config.setdefault("plugin_skills", {})[mode] = plugin_skills
-            with open(utils.config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, ensure_ascii=False, indent=4)
-            logger.info("save to config.json")
-
-        # Skill Config JSON input
-        st.subheader("⚙️ Skill Config")
-
-        skill_selections = {}
-        default_skill_selections = config.get("default_skills") or []
-        with st.expander("Skill 옵션 선택", expanded=True):
-            skill_info = skill.available_skill_info("base")
-            for s in skill_info:
-                default_value = s["name"] in default_skill_selections
-                skill_selections[s["name"]] = st.checkbox(s["name"], key=f"skill_{s['name']}", value=default_value, help=s["description"], disabled=False)
-    
-        selected_skills = [name for name, is_selected in skill_selections.items() if is_selected]
-        logger.info(f"selected_skills: {selected_skills}")
-
-        if selected_skills != config.get("default_skills"):
-            config["default_skills"] = selected_skills
-            with open(utils.config_path, "w", encoding="utf-8") as f:
-                json.dump(config, f, ensure_ascii=False, indent=4)
-            logger.info("save to config.json")
-
-        # MCP Config JSON input
-        st.subheader("⚙️ MCP Config")
-
-        # Change radio to checkbox
-        mcp_selections = {}
-
-        plugin_path = os.path.join(plugin.PLUGINS_DIR, mode)
-        default_mcp_selections = plugin.load_plugin_mcp_servers_from_list(plugin_path)
-        
-        with st.expander("MCP 옵션 선택", expanded=True):
-            for option in mcp_tools:
-                default_value = option in default_mcp_selections
-                mcp_selections[option] = st.checkbox(option, key=f"mcp_{option}", value=default_value)
-                
-        if mcp_selections["사용자 설정"]:
-            mcp = {}
-            try:
-                with open("user_defined_mcp.json", "r", encoding="utf-8") as f:
-                    mcp = json.load(f)
-                    logger.info(f"loaded user defined mcp: {mcp}")
-            except FileNotFoundError:
-                logger.info("user_defined_mcp.json not found")
-                pass
-            
-            mcp_json_str = json.dumps(mcp, ensure_ascii=False, indent=2) if mcp else ""
-            
-            mcp_info = st.text_area(
-                "MCP 설정을 JSON 형식으로 입력하세요",
-                value=mcp_json_str,
-                height=150
-            )
-            logger.info(f"mcp_info: {mcp_info}")
-
-            if mcp_info:
-                try:
-                    mcp_config.mcp_user_config = json.loads(mcp_info)
-                    logger.info(f"mcp_user_config: {mcp_config.mcp_user_config}")                    
-                    st.success("JSON 설정이 성공적으로 로드되었습니다.")                    
-                except json.JSONDecodeError as e:
-                    st.error(f"JSON 파싱 오류: {str(e)}")
-                    st.error("올바른 JSON 형식으로 입력해주세요.")
-                    logger.error(f"JSON 파싱 오류: {str(e)}")
-                    mcp_config.mcp_user_config = {}
-            else:
-                mcp_config.mcp_user_config = {}
-                
-            with open("user_defined_mcp.json", "w", encoding="utf-8") as f:
-                json.dump(mcp_config.mcp_user_config, f, ensure_ascii=False, indent=4)
-            logger.info("save to user_defined_mcp.json")
-        
-        mcp_servers = [server for server, is_selected in mcp_selections.items() if is_selected]
-
     else:
         mcp_servers = []
         selected_skills = []
@@ -322,10 +210,6 @@ with st.sidebar:
             "Nova Micro",       
         ), index=0
     )
-
-    # skill checkbox
-    select_skillMode = st.checkbox('Skill Mode', value=True)
-    skillMode = 'Enable' if select_skillMode else 'Disable'    
 
     # debug checkbox
     select_debugMode = st.checkbox('Debug Mode', value=True)
@@ -365,7 +249,7 @@ with st.sidebar:
     selected_strands_tools = [tool for tool, is_selected in strands_selections.items() if is_selected]
     selected_mcp_servers = [server for server, is_selected in mcp_selections.items() if is_selected]
     
-    chat.update(modelName, reasoningMode, debugMode, skillMode)
+    chat.update(modelName, reasoningMode, debugMode)
 
     st.success(f"Connected to {modelName}", icon="💚")
     clear_button = st.button("대화 초기화", key="clear")
@@ -483,7 +367,7 @@ if prompt := st.chat_input("메시지를 입력하세요."):
         image_urls = []
 
         if mode == '일상적인 대화':
-            stream = chat.general_conversation(prompt)            
+            stream = chat.general_conversation(prompt, st)
             response = st.write_stream(stream)
             logger.info(f"response: {response}")
 
@@ -555,24 +439,6 @@ if prompt := st.chat_input("메시지를 입력하세요."):
                     mcp_servers=selected_mcp_servers, 
                     skill_list=skill_list,
                     notification_queue=notification_queue))
-
-        else:
-            for plugin in plugin_list:
-                if mode == plugin["name"]:
-                    with st.status("thinking...", expanded=True, state="running") as status:
-                        notification_queue = NotificationQueue(container=status)
-
-                        skill_list = selected_skills if selected_skills else []
-                        logger.info(f"skill_list: {skill_list}")
-
-                        response, image_urls = asyncio.run(plugin_agent.run_plugin_agent(
-                            query=prompt, 
-                            strands_tools=selected_strands_tools, 
-                            mcp_servers=selected_mcp_servers, 
-                            skill_list=skill_list,
-                            plugin_name=plugin["name"], 
-                            plugin_skill_list=plugin_skills,
-                            notification_queue=notification_queue))
 
         if chat.debug_mode == 'Disable':
            st.markdown(response)

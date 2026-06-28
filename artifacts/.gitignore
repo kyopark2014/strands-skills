@@ -1,0 +1,15 @@
+__pycache__
+
+# configuration
+myslide*
+config.json
+*.pdf
+*.js
+*.html
+*.jpg
+*.png
+*.css
+*.pptx
+*.xlsx
+*.docx
+*.py

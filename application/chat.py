@@ -84,7 +84,6 @@ model_id = "us.anthropic.claude-sonnet-4-6"
 models = info.get_model_info(model_name)
 bedrock_region = "us-west-2"
 reasoning_mode = 'Disable'
-skill_mode = 'Disable'
 
 # Memory related variables
 MSG_LENGTH = 100
@@ -108,8 +107,8 @@ def get_max_output_tokens(model_id: str = "") -> int:
         return 64000
     return 8192
 
-def update(modelName, reasoningMode, debugMode, skillMode):    
-    global model_name, model_id, model_type, reasoning_mode, debug_mode, skill_mode
+def update(modelName, reasoningMode, debugMode):    
+    global model_name, model_id, model_type, reasoning_mode, debug_mode
 
     # load mcp.env    
     mcp_env = utils.load_mcp_env()
@@ -128,11 +127,6 @@ def update(modelName, reasoningMode, debugMode, skillMode):
     if debugMode != debug_mode:
         debug_mode = debugMode
         logger.info(f"debug_mode: {debug_mode}")        
-
-    if skillMode != skill_mode:
-        skill_mode = skillMode
-        logger.info(f"skill_mode: {skill_mode}")
-        mcp_env['skill_mode'] = skill_mode
 
     # update mcp.env    
     mcp_env['user_id'] = user_id
@@ -693,7 +687,7 @@ def update_rag_result(notification_queue, message):
 ####################### boto3 #######################
 # General Conversation
 #########################################################
-def general_conversation(query):
+def general_conversation(query, st=None):
     global memory_chain
 
     if memory_chain is None:
@@ -815,7 +809,10 @@ def general_conversation(query):
                 reasoning_start = full_content.find('<reasoning>') + 11
                 reasoning_end = full_content.find('</reasoning>')
                 reasoning_content = full_content[reasoning_start:reasoning_end]
-                st.info(f"{reasoning_content}")
+                if st is not None:
+                    st.info(f"{reasoning_content}")
+                else:
+                    logger.info(f"reasoning: {reasoning_content}")
             
             logger.info(f"full_content: {full_content}")
                 
