@@ -39,7 +39,6 @@ opensearch_client = boto3.client("opensearchserverless", region_name=region)
 ec2_client = boto3.client("ec2", region_name=region)
 elbv2_client = boto3.client("elbv2", region_name=region)
 cloudfront_client = boto3.client("cloudfront", region_name=region)
-lambda_client = boto3.client("lambda", region_name=region)
 ssm_client = boto3.client("ssm", region_name=region)
 agentcore_control_client = boto3.client(
     "bedrock-agentcore-control",
@@ -2488,90 +2487,6 @@ def create_alb(vpc_info: Dict[str, str]) -> Dict[str, str]:
         "arn": alb_arn,
         "dns": alb_dns
     }
-
-
-def create_lambda_role() -> str:
-    """Create Lambda RAG IAM role."""
-    logger.info("[2/10] Creating Lambda RAG IAM role")
-    role_name = f"role-lambda-rag-for-{project_name}-{region}"
-    
-    assume_role_policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {
-                    "Service": ["lambda.amazonaws.com", "bedrock.amazonaws.com"]
-                },
-                "Action": "sts:AssumeRole"
-            }
-        ]
-    }
-    
-    role_arn = create_iam_role(role_name, assume_role_policy)
-    
-    # Attach inline policies
-    create_log_policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["logs:CreateLogGroup"],
-                "Resource": [f"arn:aws:logs:{region}:{account_id}:*"]
-            }
-        ]
-    }
-    attach_inline_policy(role_name, f"create-log-policy-lambda-rag-for-{project_name}", create_log_policy)
-    
-    create_log_stream_policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
-                "Resource": [f"arn:aws:logs:{region}:{account_id}:log-group:/aws/lambda/*"]
-            }
-        ]
-    }
-    attach_inline_policy(role_name, f"create-stream-log-policy-lambda-rag-for-{project_name}", create_log_stream_policy)
-    
-    bedrock_invoke_policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["bedrock:*"],
-                "Resource": ["*"]
-            }
-        ]
-    }
-    attach_inline_policy(role_name, f"tool-bedrock-invoke-policy-for-{project_name}", bedrock_invoke_policy)
-    
-    opensearch_policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["aoss:APIAccessAll"],
-                "Resource": ["*"]
-            }
-        ]
-    }
-    attach_inline_policy(role_name, f"tool-bedrock-agent-opensearch-policy-for-{project_name}", opensearch_policy)
-    
-    bedrock_policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": ["bedrock:*"],
-                "Resource": ["*"]
-            }
-        ]
-    }
-    attach_inline_policy(role_name, f"tool-bedrock-agent-bedrock-policy-for-{project_name}", bedrock_policy)
-    
-    return role_arn
 
 
 def delete_knowledge_base(knowledge_base_id: str) -> None:

@@ -50,7 +50,8 @@ sharing_url = config.get("sharing_url")
 WORKING_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(WORKING_DIR)
 SKILLS_DIR = os.path.join(WORKING_DIR, "skills")
-ARTIFACTS_DIR = os.path.join(REPO_ROOT, "artifacts")
+ARTIFACTS_DIR = os.path.join(WORKING_DIR, "artifacts")
+ARTIFACTS_REL = "application/artifacts"
 
 BASE_SYSTEM_PROMPT = (
     "당신의 이름은 서연이고, 질문에 친근한 방식으로 대답하도록 설계된 대화형 AI입니다.\n"
@@ -61,7 +62,7 @@ BASE_SYSTEM_PROMPT = (
     "1. 사용자 입력을 받는다\n"
     "2. 요청에 맞는 skill이 있으면 skills 도구로 해당 skill의 상세 지침을 로드한다\n"
     "3. skill 지침에 따라 file_read, file_write, execute_code 등의 도구를 사용하여 작업을 수행한다\n"
-    "4. 결과 파일은 REPO_ROOT/artifacts/ 디렉터리에 저장하고, 있으면 upload_file_to_s3로 업로드하여 URL을 제공한다\n"
+    "4. 결과 파일은 application/artifacts/ 디렉터리(ARTIFACTS_DIR)에 저장하고, 있으면 upload_file_to_s3로 업로드하여 URL을 제공한다\n"
     "5. 최종 결과를 사용자에게 전달한다\n"
 )
 
@@ -175,8 +176,15 @@ def resolve_workspace_path(filepath: str) -> str:
     if os.path.isabs(filepath):
         return filepath
     normalized = filepath.replace("\\", "/")
-    if normalized == "artifacts" or normalized.startswith("artifacts/"):
-        suffix = normalized[len("artifacts"):].lstrip("/")
+    if (
+        normalized in ("artifacts", "application/artifacts")
+        or normalized.startswith("artifacts/")
+        or normalized.startswith("application/artifacts/")
+    ):
+        if normalized.startswith("application/artifacts"):
+            suffix = normalized[len("application/artifacts"):].lstrip("/")
+        else:
+            suffix = normalized[len("artifacts"):].lstrip("/")
         return os.path.join(ARTIFACTS_DIR, suffix) if suffix else ARTIFACTS_DIR
     return os.path.join(WORKING_DIR, filepath)
 
@@ -243,6 +251,7 @@ _exec_globals = {
     "WORKING_DIR": WORKING_DIR,
     "REPO_ROOT": REPO_ROOT,
     "ARTIFACTS_DIR": ARTIFACTS_DIR,
+    "ARTIFACTS_REL": ARTIFACTS_REL,
 }
 
 @tool
@@ -255,12 +264,13 @@ def execute_code(code: str) -> str:
     json, csv, os, requests, etc.
 
     Variables and imports from previous calls persist across invocations.
-    Generated files should be saved to the 'artifacts/' directory.
+    Generated files should be saved under application/artifacts/ (relative: artifacts/).
 
     Path variables (pre-defined, do NOT redefine):
     - REPO_ROOT: absolute path to repository root
     - WORKING_DIR: absolute path to application directory
-    - ARTIFACTS_DIR: absolute path to artifacts directory (REPO_ROOT/artifacts)
+    - ARTIFACTS_DIR: absolute path to application/artifacts
+    - ARTIFACTS_REL: workspace-relative path "application/artifacts"
 
     Args:
         code: Python code to execute.
@@ -278,7 +288,7 @@ def execute_code(code: str) -> str:
     stderr_capture = io.StringIO()
 
     try:
-        os.chdir(REPO_ROOT)
+        os.chdir(WORKING_DIR)
         old_stdout, old_stderr = sys.stdout, sys.stderr
         sys.stdout, sys.stderr = stdout_capture, stderr_capture
 
@@ -333,7 +343,7 @@ def upload_file_to_s3(filepath: str) -> str:
     """Upload a local file to S3 and return the download URL.
 
     Args:
-        filepath: Path relative to the working directory (e.g. 'artifacts/report.pdf').
+        filepath: Path under application/ (e.g. 'artifacts/report.pdf' or 'application/artifacts/report.pdf').
 
     Returns:
         The download URL, or an error message.
@@ -511,7 +521,7 @@ def bash(command: str) -> str:
     _ensure_cli_scripts_on_path()
     result = subprocess.run(
         command, shell=True, capture_output=True, text=True,
-        cwd=REPO_ROOT, timeout=300,
+        cwd=WORKING_DIR, timeout=300,
         env=os.environ,
     )
     parts = []
