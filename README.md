@@ -4,7 +4,7 @@
 
 여기에서 사용하는 architecture는 아래와 같습니다. Streamlit 애플리케이션은 **로컬**에서 실행하고, RAG·스토리지·공유 URL 등에 필요한 AWS 백엔드는 [installer.py](./installer.py)로 프로비저닝합니다. OpenSearch, S3, CloudFront, Knowledge Base는 `agent-skills` 등과 **공유**할 수 있으며, Agent가 생성하는 그림이나 문서는 S3와 CloudFront URL로 공유됩니다. MCP server/client를 이용해 인터넷 검색(Tavily), RAG(Knowledge Base), AWS tools(use-aws), Notion 등을 활용할 수 있습니다. 여기서 활용하는 architecture는 아래와 같습니다.
 
-<img width="900" alt="image" src="https://github.com/user-attachments/assets/3dd2dd6f-83ff-4c23-beda-0f8577bbec3d" />
+<img width="900" alt="image" src="https://github.com/user-attachments/assets/d61ccc0e-5194-4b16-a8ba-43790256276e" />
 
 
 ## Agent Skills
