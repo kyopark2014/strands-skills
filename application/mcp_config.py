@@ -37,19 +37,7 @@ def load_config(mcp_type):
     elif mcp_type == "knowledge base":
         mcp_type = "kb-retriever"
 
-    if mcp_type == "basic":
-        return {
-            "mcpServers": {
-                "search": {
-                    "command": "python",
-                    "args": [
-                        f"{workingDir}/mcp_server_basic.py"
-                    ]
-                }
-            }
-        }
-    
-    elif mcp_type == "aws_documentation":
+    if mcp_type == "aws_documentation":
         return {
             "mcpServers": {
                 "awslabs.aws-documentation-mcp-server": {
@@ -157,26 +145,6 @@ def load_config(mcp_type):
                 }
             }
         }   
-    
-    elif mcp_type == "drawio":
-        return {
-            "mcpServers": {
-                "drawio": {
-                "command": "npx",
-                "args": ["@drawio/mcp"]
-                }
-            }
-        }
-    
-    elif mcp_type == "web_fetch":
-        return {
-            "mcpServers": {
-                "web_fetch": {
-                    "command": "npx",
-                    "args": ["-y", "mcp-server-fetch-typescript"]
-                }
-            }
-        }
     
     elif mcp_type == "text_extraction":
         return {

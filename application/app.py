@@ -65,27 +65,26 @@ with st.sidebar:
     strands_tools = ["current_time", "file_read", "file_write", "http_request"] 
     default_strands_tool_selections = ["current_time", "file_read", "file_write"]    
     
-    # mcp selection    
+    # mcp selection (names must match mcp_config.load_config keys or aliases)
     mcp_tools = [
-        "use-aws", 
-        "tavily", 
-        "knowledge base", 
-        "aws_documentation", 
-        "trade_info", 
-        "code interpreter", 
+        "use_aws",
+        "knowledge base",
+        "aws_documentation",
+        "tavily",
+        "trade_info",
+        "code interpreter",
         "web_fetch",
         "websearch",
         "drawio",
         "text_extraction",
         "slack",
         "notion",
-        "outlook",
         "gog",
         "korea_weather",
         "obsidian",
         "AWS Sentral (Employee)",
         "AWS Outlook (Employee)",
-        "사용자 설정"
+        "사용자 설정",
     ]
 
     mcp_selections = {}
