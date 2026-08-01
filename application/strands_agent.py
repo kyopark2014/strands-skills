@@ -1205,6 +1205,7 @@ async def run_strands_agent(query: str, strands_tools: list[str], mcp_servers: l
 
     # run agent
     final_result = current = ""
+    stop_reason: str | None = None
     with mcp_manager.get_active_clients(mcp_servers) as _:
         agent_stream = agent.stream_async(query)
 
@@ -1218,10 +1219,13 @@ async def run_strands_agent(query: str, strands_tools: list[str], mcp_servers: l
 
             elif "result" in event:
                 final = event["result"]
+                stop_reason = getattr(final, "stop_reason", None)
+                if stop_reason:
+                    logger.info(f"[stop_reason] {stop_reason}")
                 message = final.message
                 if message:
                     content = message.get("content", [])
-                    result = content[0].get("text", "")
+                    result = content[0].get("text", "") if content else ""
                     logger.info(f"[result] {result}")
                     final_result = result
 
@@ -1275,6 +1279,26 @@ async def run_strands_agent(query: str, strands_tools: list[str], mcp_servers: l
 
             else:
                 logger.info(f"event: {event}")
+
+        # Final stop_reason wins even when earlier turns left preamble text
+        # (e.g. "확인해보겠습니다" + tools, then empty refusal).
+        if stop_reason == "content_filtered":
+            final_result = (
+                "요청이 모델 안전 정책에 의해 차단되었습니다. "
+                "다른 모델로 시도하거나 질문을 바꿔 주세요."
+            )
+        elif stop_reason == "guardrail_intervened":
+            final_result = (
+                "요청이 Guardrail 안전 정책에 의해 차단되었습니다. "
+                "질문을 바꿔 주세요."
+            )
+        elif stop_reason == "refusal":
+            final_result = (
+                "모델이 이 요청에 대한 응답을 거부했습니다. "
+                "다른 모델로 시도하거나 질문을 바꿔 주세요."
+            )
+        elif not (final_result or "").strip():
+            final_result = current or "답변을 찾지 못하였습니다."
 
         if references:
             final_result += _format_references_markdown(references)
