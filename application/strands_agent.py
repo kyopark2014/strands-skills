@@ -1,5 +1,5 @@
-import chat
-import os
+import hashlib
+import re
 import contextlib
 import info
 import bedrock_data_retention
@@ -11,8 +11,8 @@ import boto3
 import subprocess
 
 from contextlib import contextmanager
-from typing import Dict, List, Optional
-from strands.models import BedrockModel
+from typing import Any, Dict, List, Optional
+from strands.models import BedrockModel, CacheConfig, CacheToolsConfig
 from strands.models.openai import OpenAIModel
 from strands.models.openai_responses import OpenAIResponsesModel
 from strands_tools import current_time, file_read, file_write
@@ -570,7 +570,12 @@ def _ensure_mantle_base_url_patch() -> None:
     _mantle_url_patch_applied = True
 
 
-def _build_mantle_openai_model(profile: dict, boto_session, max_output_tokens: int):
+def _build_mantle_openai_model(
+    profile: dict,
+    boto_session,
+    max_output_tokens: int,
+    session_id: str | None = None,
+):
     """Route OpenAI-compatible Bedrock models through Bedrock Mantle."""
     _ensure_mantle_base_url_patch()
 
@@ -580,13 +585,18 @@ def _build_mantle_openai_model(profile: dict, boto_session, max_output_tokens: i
     mantle_config = {"region": bedrock_region, "boto_session": boto_session}
 
     if mantle_api == "responses":
-        return OpenAIResponsesModel(
+        params: dict[str, Any] = {
+            "max_output_tokens": max_output_tokens,
+            "temperature": 0.1,
+        }
+        model_cls: type = OpenAIResponsesModel
+        if _supports_gpt_explicit_caching("openai", model_id):
+            params.update(_gpt_mantle_cache_params(session_id))
+            model_cls = MantleGPTResponsesModel
+        return model_cls(
             model_id=model_id,
             bedrock_mantle_config=mantle_config,
-            params={
-                "max_output_tokens": max_output_tokens,
-                "temperature": 0.1,
-            },
+            params=params,
         )
 
     return OpenAIModel(
@@ -599,7 +609,106 @@ def _build_mantle_openai_model(profile: dict, boto_session, max_output_tokens: i
     )
 
 
-def get_model():
+class MantleGPTResponsesModel(OpenAIResponsesModel):
+    """Mantle Responses API with GPT 5.6+ explicit system-prefix caching."""
+
+    def _format_request(
+        self,
+        messages,
+        tool_specs=None,
+        system_prompt: str | None = None,
+        tool_choice=None,
+        model_state=None,
+    ) -> dict[str, Any]:
+        request = super()._format_request(
+            messages,
+            tool_specs=tool_specs,
+            system_prompt=None,
+            tool_choice=tool_choice,
+            model_state=model_state,
+        )
+        if system_prompt:
+            prefix = {
+                "type": "message",
+                "role": "developer",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": system_prompt,
+                        "prompt_cache_breakpoint": {"mode": "explicit"},
+                    }
+                ],
+            }
+            request["input"] = [prefix, *list(request.get("input") or [])]
+        return request
+
+
+PROMPT_CACHE_TTL = "5m"
+GPT_PROMPT_CACHE_OPTIONS = {"mode": "explicit", "ttl": "30m"}
+
+
+def _supports_bedrock_prompt_caching(model_type: str | None) -> bool:
+    return model_type in ("claude", "nova")
+
+
+def _supports_gpt_explicit_caching(model_type: str | None, model_id: str | None) -> bool:
+    if model_type != "openai":
+        return False
+    mid = (model_id or "").lower()
+    match = re.search(r"openai\.gpt-(\d+)\.(\d+)", mid)
+    if not match:
+        return False
+    major, minor = int(match.group(1)), int(match.group(2))
+    return (major, minor) >= (5, 6)
+
+
+def _gpt_mantle_cache_params(session_id: str | None) -> dict[str, Any]:
+    project = config.get("projectName") or "default"
+    sid = session_id or chat.user_id or "default"
+    return {
+        "prompt_cache_key": f"{project}:{sid}:strands",
+        "prompt_cache_options": GPT_PROMPT_CACHE_OPTIONS,
+    }
+
+
+def _prompt_cache_kwargs(model_type: str) -> dict:
+    if not _supports_bedrock_prompt_caching(model_type):
+        return {}
+    strategy = "auto" if model_type == "claude" else "anthropic"
+    return {
+        "cache_prompt": "default",
+        "cache_tools": CacheToolsConfig(type="default", ttl=PROMPT_CACHE_TTL),
+        "cache_config": CacheConfig(strategy=strategy, ttl=PROMPT_CACHE_TTL),
+    }
+
+
+def _log_prompt_cache_usage(result) -> None:
+    metrics = getattr(result, "metrics", None)
+    if metrics is None:
+        return
+    usage = None
+    latest = getattr(metrics, "latest_agent_invocation", None)
+    if latest is not None:
+        latest_usage = getattr(latest, "usage", None)
+        if isinstance(latest_usage, dict) and latest_usage:
+            usage = latest_usage
+    if usage is None:
+        accumulated = getattr(metrics, "accumulated_usage", None)
+        if isinstance(accumulated, dict):
+            usage = accumulated
+    if not isinstance(usage, dict):
+        return
+    cache_read = usage.get("cacheReadInputTokens") or 0
+    cache_creation = usage.get("cacheWriteInputTokens") or 0
+    if cache_read or cache_creation:
+        logger.info(
+            "prompt cache usage: cache_read=%s cache_creation=%s",
+            cache_read,
+            cache_creation,
+        )
+
+
+def get_model(session_id: str | None = None):
     model_profiles = info.get_model_info(chat.model_name)
     if not model_profiles:
         raise RuntimeError(f"No Bedrock profile for model_name={chat.model_name!r}")
@@ -649,6 +758,7 @@ def get_model():
         )
 
     adaptive_thinking = chat.uses_adaptive_thinking(model_id)
+    prompt_cache_kwargs = _prompt_cache_kwargs(model_type)
 
     if chat.reasoning_mode == "Enable" and model_type != "openai" and not adaptive_thinking:
         model = BedrockModel(
@@ -664,6 +774,7 @@ def get_model():
                     "budget_tokens": thinking_budget,
                 }
             },
+            **prompt_cache_kwargs,
         )
     elif chat.reasoning_mode == "Disable" and model_type != "openai" and not adaptive_thinking:
         model = BedrockModel(
@@ -678,6 +789,7 @@ def get_model():
                     "type": "disabled"
                 }
             },
+            **prompt_cache_kwargs,
         )
     elif model_type != "openai" and adaptive_thinking:
         model = BedrockModel(
@@ -686,9 +798,12 @@ def get_model():
             model_id=model_id,
             max_tokens=maxOutputTokens,
             stop_sequences=[STOP_SEQUENCE],
+            **prompt_cache_kwargs,
         )
     elif model_type == "openai":
-        model = _build_mantle_openai_model(profile, boto_session, maxOutputTokens)
+        model = _build_mantle_openai_model(
+            profile, boto_session, maxOutputTokens, session_id=session_id
+        )
 
     return model
 
@@ -1151,7 +1266,7 @@ def create_agent(strands_tools: list[str], mcp_servers: list[str], skill_list: l
 
     tools = update_tools(strands_tools, mcp_servers)
 
-    model = get_model()
+    model = get_model(session_id=chat.user_id)
 
     skills_sources = skill_dirs_from_list(skill_list)
     logger.info(f"skill_list: {skill_list} -> skills_sources: {skills_sources}")
@@ -1262,6 +1377,7 @@ async def run_strands_agent(query: str, strands_tools: list[str], mcp_servers: l
                 stop_reason = getattr(final, "stop_reason", None)
                 if stop_reason:
                     logger.info(f"[stop_reason] {stop_reason}")
+                _log_prompt_cache_usage(final)
                 message = final.message
                 if message:
                     content = message.get("content", [])
