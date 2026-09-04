@@ -643,7 +643,8 @@ class MantleGPTResponsesModel(OpenAIResponsesModel):
         return request
 
 
-PROMPT_CACHE_TTL = "5m"
+# Bedrock Anthropic/Nova prompt caching (ephemeral, 1h TTL).
+PROMPT_CACHE_TTL = "1h"
 GPT_PROMPT_CACHE_OPTIONS = {"mode": "explicit", "ttl": "30m"}
 
 
