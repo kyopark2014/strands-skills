@@ -19,7 +19,7 @@ from bedrock_agentcore.memory import MemoryClient
 # Configuration (must match installer.py)
 project_name = "strands-skills"
 region = "us-west-2"
-AGENTCORE_GATEWAY_REGION = "us-east-1"
+AGENTCORE_GATEWAY_REGION = "us-west-2"
 AGENTCORE_WEBSEARCH_GATEWAY_NAME = "gateway-websearch"
 vector_index_name = "rag-project"
 cloudfront_comment = "CloudFront-for-rag-project"

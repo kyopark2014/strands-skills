@@ -36,7 +36,7 @@ ALB·EC2 배포는 별도 프로젝트에서 관리하며, 이 installer는 **�
 # 프로젝트 전용
 project_name = "strands-skills"        # 프로젝트 이름 (최소 3자)
 region = "us-west-2"                   # AWS 리전
-AGENTCORE_GATEWAY_REGION = "us-east-1"
+AGENTCORE_GATEWAY_REGION = "us-west-2"
 
 # 공유 RAG 리소스 (agent-skills와 동일)
 vector_index_name = "rag-project"
@@ -100,7 +100,7 @@ knowledge_base_role_name = f"role-knowledge-base-for-{vector_index_name}-{region
 - **sharing_url**: `https://{cloudfront_domain}` → `application/config.json`에 저장
 
 ### 7. AgentCore Web Search Gateway (공유 가능)
-- **Gateway**: `gateway-websearch` (`us-east-1`)
+- **Gateway**: `gateway-websearch` (`us-west-2`)
 - **Target**: 관리형 `web-search` 커넥터
 - 이미 존재하면 재사용
 
